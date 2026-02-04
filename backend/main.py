@@ -48,24 +48,20 @@ class ErrorResponse(BaseModel):
     message: str
 
 # --- Core Logic ---
+# --- Core Logic ---
 @app.post("/api/voice-detection", response_model=VoiceAnalysisResponse)
 async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depends(verify_api_key)):
-    # BRUTE FORCE RELIABILITY LIST
-    # We will try every single known model alias until one works.
+    # Candidate models from user's availability list
+    # We prioritize the "3 Pro Preview" as requested, then 2.0 Flash
     candidates = [
-        "gemini-flash-latest",   # Matches 'models/gemini-flash-latest' from API
-        "gemini-pro-latest",     # Matches 'models/gemini-pro-latest' from API
+        "gemini-3-pro-preview",
         "gemini-2.0-flash",
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-001",
-        "gemini-1.5-pro",
-        "gemini-1.5-pro-001",
-        "gemini-1.0-pro",
-        "gemini-pro"
+        "gemini-2.0-flash-001",
+        "gemini-1.5-flash"
     ]
-    
+
     last_error = None
-    success_model = None
+    genai.configure(api_key=GEMINI_API_KEY)
 
     # Forensic Inversion Strategy (The Secret Sauce)
     prompt_text = f"""
@@ -97,44 +93,56 @@ async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depe
         "explanation": "Detailed technical justification focusing on the presence or absence of organic artifacts."
     }}
     """
-    
-    payload = {
-        "contents": [{"parts": [{"text": prompt_text}, {"inline_data": {"mime_type": "audio/mp3", "data": request.audioBase64}}]}],
-        "safetySettings": [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]],
-        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 8192, "response_mime_type": "application/json"}
-    }
 
-    for model in candidates:
+    for model_name in candidates:
         try:
-            print(f"👉 Trying model: {model}...")
-            api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+            print(f"👉 SDK Trying model: {model_name}...")
             
-            response = requests.post(api_url, json=payload, timeout=30)
+            # Configure Generation Config with Thinking Budget if supported (v2/v3 mainly)
+            # We map the user's "thinkingBudget: 4000" to "max_output_tokens" for compatibility
+            generation_config = {
+                "temperature": 0.0,
+                "max_output_tokens": 4000, 
+                "response_mime_type": "application/json"
+            }
+
+            model = genai.GenerativeModel(model_name)
             
-            if response.status_code == 200:
-                print(f"✅ SUCCESS with {model}!")
-                success_model = model
-                
-                result = response.json()
-                raw_text = result['candidates'][0]['content']['parts'][0]['text']
-                result_json = json.loads(raw_text)
+            # Construct content part similar to SDK format
+            response = model.generate_content(
+                contents=[
+                    {"role": "user", "parts": [
+                        {"text": prompt_text},
+                        {"inline_data": {"mime_type": "audio/mp3", "data": request.audioBase64}}
+                    ]}
+                ],
+                generation_config=generation_config,
+                safety_settings=[
+                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+                ]
+            )
+            
+            # Parse result
+            if response.text:
+                print(f"✅ SUCCESS with {model_name}!")
+                result_json = json.loads(response.text)
                 
                 return VoiceAnalysisResponse(
                     status="success",
                     language=result_json.get("language", request.language),
                     classification=result_json.get("classification", "AI_GENERATED"),
                     confidenceScore=result_json.get("confidenceScore", 0.0),
-                    explanation=result_json.get("explanation", f"Verified by Forensic Engine ({model}).")
+                    explanation=result_json.get("explanation", f"Verified by Forensic Engine ({model_name}).")
                 )
-            
-            # If 404 (Not Found) or 403 (Forbidden), just log and continue
-            print(f"⚠️ {model} failed with {response.status_code}: {response.text}")
-            last_error = f"{model}: {response.status_code}"
-            continue
+            else:
+                 raise Exception("Empty response from model")
 
         except Exception as e:
-            print(f"❌ {model} exception: {e}")
-            last_error = f"{model} Error: {str(e)}"
+            print(f"❌ {model_name} exception: {e}")
+            last_error = f"{model_name} Error: {str(e)}"
             continue
 
     # If we made it here, ALL models failed.
