@@ -53,15 +53,15 @@ async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depe
     # BRUTE FORCE RELIABILITY LIST
     # We will try every single known model alias until one works.
     candidates = [
+        "gemini-flash-latest",   # Matches 'models/gemini-flash-latest' from API
+        "gemini-pro-latest",     # Matches 'models/gemini-pro-latest' from API
+        "gemini-2.0-flash",
         "gemini-1.5-flash", 
         "gemini-1.5-flash-001",
-        "gemini-1.5-flash-latest",
         "gemini-1.5-pro",
         "gemini-1.5-pro-001",
         "gemini-1.0-pro",
-        "gemini-pro",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-exp"
+        "gemini-pro"
     ]
     
     last_error = None
