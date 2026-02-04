@@ -49,12 +49,13 @@ class ErrorResponse(BaseModel):
 
 @app.post("/api/voice-detection", response_model=VoiceAnalysisResponse)
 async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depends(verify_api_key)):
-    # DISCOVERED MODELS FOR THIS KEY
-    # We found 'gemini-3-pro-preview' is available!
+    # ROBUST FREE TIER FALLBACK CHAIN
+    # Trying standard models that are typically free/unrestricted
     models = [
-        "gemini-3-pro-preview", 
-        "gemini-2.5-flash",
-        "gemini-2.0-flash"
+        "gemini-2.0-flash",      # Standard Free Model (New)
+        "gemini-1.5-flash",      # Standard Free Model (Stable)
+        "gemini-1.5-flash-8b",   # Lightweight Free Model
+        "gemini-1.5-pro-latest"  # Fallback Pro
     ]
     
     last_error = None
