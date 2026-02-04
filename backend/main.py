@@ -99,8 +99,8 @@ async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depe
             payload = {
                 "contents": [{"parts": [{"text": prompt_text}, {"inline_data": {"mime_type": "audio/mp3", "data": request.audioBase64}}]}],
                 "safetySettings": [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]],
-                # High thinking budget simulation via max output tokens if needed, but temperature 0.0 is key for strictness
-                "generationConfig": {"temperature": 0.0, "response_mime_type": "application/json"}
+                # High thinking budget simulation via max output tokens
+                "generationConfig": {"temperature": 0.0, "maxOutputTokens": 8192, "response_mime_type": "application/json"}
             }
             
             response = requests.post(api_url, json=payload, timeout=50) # Increased timeout for Pro model
