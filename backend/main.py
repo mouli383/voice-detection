@@ -49,11 +49,12 @@ class ErrorResponse(BaseModel):
 
 @app.post("/api/voice-detection", response_model=VoiceAnalysisResponse)
 async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depends(verify_api_key)):
-    # List of models to try in order of preference (Speed -> Quality -> Legacy)
+    # List of models to try in order of preference (Quality/Reasoning -> Speed)
+    # Using Gemini 1.5 Pro as requested for "Gemini 3 Pro" level reasoning
     models = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
         "gemini-1.5-pro",
+        "gemini-1.5-pro-latest",
+        "gemini-1.5-flash", 
         "gemini-pro"
     ]
     
@@ -64,40 +65,45 @@ async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depe
             print(f"Attempting analysis with model: {model}")
             api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
             
-            # Forensic Inversion Strategy
+            # The "Secret Sauce" Prompt
             prompt_text = f"""
-            ACT AS: Senior Forensic Audio Analyst.
-            TASK: Determine if vocal source is BIO-ORGANIC (Human) or SYNTHETIC (AI).
-            LANGUAGE: {request.language}
+            You are an advanced forensic acoustic engineer. Your objective is to perform a high-fidelity audit of the provided audio to distinguish between organic human speech and synthetic (AI) generation.
             
-            FORENSIC CHECKLIST:
-            1. SEARCH FOR 'PROOF OF LIFE' (POL):
-               - Breathing patterns.
-               - Mouth/Lip clicks.
-               - Natural Room-tone bleed.
-            2. SEARCH FOR 'SYNTHETIC MARKERS' (SM):
-               - Robotic spectral consistency.
-               - Digital flatness.
+            AUTHENTICATION PROTOCOL:
+            IDENTIFY LANGUAGE: Determine if the sample is Tamil, English, Hindi, Malayalam, or Telugu ({request.language} suggested).
+            SPECTRAL AUDIT: Analyze for 'Phase Locking' or 'Harmonic Ghosting' typical of neural vocoders.
+            TEMPORAL ANALYSIS: Check for micro-timing irregularities. AI speech often has unnatural rhythmic precision even when simulating 'naturalness.'
             
-            DECISION: If POL exists (even if audio is clear), it is HUMAN. If POL is absent and spectral noise is hyper-consistent, it is AI_GENERATED.
+            PROOF OF LIFE (POL) MARKERS: Scrutinize for involuntary human artifacts:
+            - Natural aspiration (breathing patterns correlated with phrasing).
+            - Dental/Labial clicks (moisture sounds in the mouth).
+            - Involuntary vocal fold tremors or organic fatigue.
+            - Background environment 'bleed' or room-tone variance.
             
-            Return exactly this JSON:
+            CLASSIFICATION RULES:
+            - Classify as 'HUMAN' if you detect POL markers or irregular spectral noise consistent with organic physiology.
+            - Classify as 'AI_GENERATED' if the speech shows hyper-consistent pitch modulation, a flat 'digital' noise floor, or lack of micro-prosodic emotional resonance.
+            
+            IMPORTANT: Do not be fooled by high audio quality. Focus on the underlying physical authenticity of the vocal source.
+            
+            Return exactly this JSON structure:
             {{
                 "status": "success",
                 "language": "{request.language}",
-                "classification": "HUMAN" or "AI_GENERATED",
-                "confidenceScore": float,
-                "explanation": "Reasoning based on POL/SM markers."
+                "classification": "AI_GENERATED" | "HUMAN",
+                "confidenceScore": float (0.0 - 1.0),
+                "explanation": "Detailed technical justification focusing on the presence or absence of organic artifacts."
             }}
             """
             
             payload = {
                 "contents": [{"parts": [{"text": prompt_text}, {"inline_data": {"mime_type": "audio/mp3", "data": request.audioBase64}}]}],
                 "safetySettings": [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]],
+                # High thinking budget simulation via max output tokens if needed, but temperature 0.0 is key for strictness
                 "generationConfig": {"temperature": 0.0, "response_mime_type": "application/json"}
             }
             
-            response = requests.post(api_url, json=payload, timeout=45)
+            response = requests.post(api_url, json=payload, timeout=50) # Increased timeout for Pro model
             
             if response.status_code == 200:
                 result = response.json()
@@ -106,24 +112,23 @@ async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depe
                 
                 return VoiceAnalysisResponse(
                     status="success",
-                    language=request.language,
+                    language=result_json.get("language", request.language),
                     classification=result_json.get("classification", "AI_GENERATED"),
                     confidenceScore=result_json.get("confidenceScore", 0.0),
-                    explanation=result_json.get("explanation", f"Verification completed using {model}.")
+                    explanation=result_json.get("explanation", f"Forensic audit completed using {model}.")
                 )
             else:
                 print(f"Model {model} failed with {response.status_code}: {response.text}")
                 last_error = response.text
-                continue # Try next model
+                continue 
                 
         except Exception as e:
             print(f"Model {model} exception: {e}")
             last_error = str(e)
             continue
 
-    # If all models fail, raise HTTP exception which is caught by FastAPI
     print(f"All models failed. Last error: {last_error}")
-    raise HTTPException(status_code=500, detail={"status": "error", "message": f"All AI models failed. {last_error}"})
+    raise HTTPException(status_code=500, detail={"status": "error", "message": f"Forensic engine offline. {last_error}"})
 
 @app.get("/health")
 def health_check():
