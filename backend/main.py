@@ -130,9 +130,13 @@ async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depe
     print(f"All models failed. Last error: {last_error}")
     raise HTTPException(status_code=500, detail={"status": "error", "message": f"Forensic engine offline. {last_error}"})
 
+@app.get("/")
+def home():
+    return {"status": "online", "system": "VoxGuard Neural Forensic Engine", "version": "5.0.0"}
+
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "model_backend": "gemini-1.5-flash-001"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
