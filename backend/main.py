@@ -48,7 +48,7 @@ class ErrorResponse(BaseModel):
     message: str
 
 # --- Dynamic Model Resolution ---
-ACTIVE_MODEL = "gemini-1.5-flash" # Default fallback
+ACTIVE_MODEL = "gemini-2.0-flash" # Default to 2.0 as 1.5 is missing for this key
 
 def resolve_best_model():
     global ACTIVE_MODEL
@@ -63,21 +63,18 @@ def resolve_best_model():
         
         print(f"📋 Found models: {available}")
         
-        # Priority Queue: Pro 1.5 -> Flash 1.5 -> Pro 1.0 -> Flash 1.0
+        # Priority Queue: Update with models ACTUALLY found in user's account
         priorities = [
-            "models/gemini-1.5-pro",
-            "models/gemini-1.5-flash",
-            "models/gemini-1.5-pro-latest",
-            "models/gemini-1.5-flash-latest",
-            "models/gemini-pro",
-            "models/gemini-1.0-pro"
+            "models/gemini-2.0-flash",      # Standard New
+            "models/gemini-2.0-flash-001",  # Stable New
+            "models/gemini-2.5-flash",      # Bleeding Edge
+            "models/gemini-1.5-pro",        # Legacy Pro
+            "models/gemini-1.5-flash"       # Legacy Flash
         ]
         
         for p in priorities:
             if p in available:
-                ACTIVE_MODEL = p.replace("models/", "") # API expects simple name sometimes, or usually 'models/' prefix for SDK
-                # For REST API, we normally need just the name, but list_models returns "models/name"
-                # Let's clean it just in case.
+                ACTIVE_MODEL = p.replace("models/", "") 
                 print(f"✅ Selected Best Model: {ACTIVE_MODEL}")
                 return
 
@@ -87,7 +84,6 @@ def resolve_best_model():
                 ACTIVE_MODEL = m.replace("models/", "")
                 print(f"⚠️ Fallback Model Selected: {ACTIVE_MODEL}")
                 return
-
     except Exception as e:
         print(f"❌ Model Resolution Failed: {e}. Using default: {ACTIVE_MODEL}")
 
