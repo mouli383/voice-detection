@@ -4,13 +4,14 @@ export class VoiceDetectionService {
   constructor() { }
 
   async analyzeVoice(
-    audioBase64: string
+    audioBase64: string,
+    language: string
   ): Promise<DetectionResponse> {
     const API_URL = "https://voice-detection-f5x9.onrender.com/api/voice-detection";
     const API_KEY = "sk_test_123456789";
 
     try {
-      console.log("📡 Sending request to Voice Detection Backend...");
+      console.log(`📡 Sending request for ${language} audio...`);
 
       const response = await fetch(API_URL, {
         method: "POST",
@@ -19,7 +20,7 @@ export class VoiceDetectionService {
           "x-api-key": API_KEY
         },
         body: JSON.stringify({
-          language: "English",
+          language: language,
           audioFormat: "mp3",
           audioBase64: audioBase64
         })
