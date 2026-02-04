@@ -168,15 +168,28 @@ const App: React.FC = () => {
         </div>
 
         {/* Results */}
-        {result && result.status === 'success' && (
+        {/* Results */}
+        {result && (
           <div className="animate-in fade-in slide-in-from-top-4 duration-500">
-            <ResultCard result={result} />
-            <div className="mt-6 flex justify-center">
-              <button onClick={reset} className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
-                <ICONS.Trash className="w-4 h-4" />
-                Flush Audit Logs
-              </button>
-            </div>
+            {result.status === 'error' ? (
+              <div className="p-6 rounded-2xl bg-red-500/10 border border-red-500/30 text-center space-y-2">
+                <div className="text-red-400 font-bold text-lg">Forensic Analysis Failed</div>
+                <p className="text-red-300/80 text-sm">{(result as any).message || "The engine returned an invalid response."}</p>
+                <button onClick={reset} className="mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-white text-xs rounded-lg transition-colors">
+                  Reset System
+                </button>
+              </div>
+            ) : (
+              <>
+                <ResultCard result={result} />
+                <div className="mt-6 flex justify-center">
+                  <button onClick={reset} className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors">
+                    <ICONS.Trash className="w-4 h-4" />
+                    Flush Audit Logs
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -186,13 +199,7 @@ const App: React.FC = () => {
           <p className="text-sm text-gray-400 mb-6">Real-time JSON serialization of the verification engine results.</p>
           <div className="bg-black/40 rounded-xl p-6 border border-white/5 shadow-inner">
             <pre className="text-xs text-blue-300 mono leading-relaxed">
-              {`{
-  "status": "${result?.status || 'success'}",
-  "language": "${result?.language || 'Tamil'}",
-  "classification": "${result?.classification || 'AI_GENERATED'}",
-  "confidenceScore": ${result?.confidenceScore || 0.98},
-  "explanation": "${result?.explanation || 'Awaiting forensic data stream...'}"
-}`}
+              {JSON.stringify(result || { status: "waiting", message: "Awaiting forensic data stream..." }, null, 2)}
             </pre>
           </div>
         </section>
