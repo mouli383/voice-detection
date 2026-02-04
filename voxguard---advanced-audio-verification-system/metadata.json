@@ -1,0 +1,8 @@
+
+{
+  "name": "VoxGuard - Advanced Audio Verification System",
+  "description": "A specialized forensic platform developed for the HCL GUVI Hackathon to authenticate vocal origins and identify synthetic audio across five regional languages.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
