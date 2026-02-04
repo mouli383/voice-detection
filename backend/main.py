@@ -49,9 +49,13 @@ class ErrorResponse(BaseModel):
 
 @app.post("/api/voice-detection", response_model=VoiceAnalysisResponse)
 async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depends(verify_api_key)):
-    # SIMPLIFIED STABILITY MODE
-    # Using the single most reliable model to stop 500 Errors immediately.
-    models = ["gemini-1.5-flash"]
+    # DISCOVERED MODELS FOR THIS KEY
+    # We found 'gemini-3-pro-preview' is available!
+    models = [
+        "gemini-3-pro-preview", 
+        "gemini-2.5-flash",
+        "gemini-2.0-flash"
+    ]
     
     last_error = None
     
