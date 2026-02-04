@@ -8,15 +8,13 @@ import json
 import base64
 import requests
 from typing import Optional
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables
 load_dotenv()
 
-from fastapi.middleware.cors import CORSMiddleware
-
 app = FastAPI(title="Voice Detection API")
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,25 +23,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# --- Dependency for API Key Authentication ---
 async def verify_api_key(x_api_key: str = Header(...)):
-    # In production, check against a secure store or environment variable
     valid_key = os.getenv("CALLGUARD_AI_API_KEY", "sk_test_123456789")
-    
     if x_api_key != valid_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid API key"
-        )
+        raise HTTPException(status_code=401, detail="Invalid API key")
     return x_api_key
 
-# --- Request/Response Models ---
 class VoiceAnalysisRequest(BaseModel):
-    language: str = Field(..., description="Tamil, English, Hindi, Malayalam, or Telugu")
-    audioFormat: str = Field(..., pattern="^mp3$")
+    language: str
+    audioFormat: str
     audioBase64: str
 
 class VoiceAnalysisResponse(BaseModel):
@@ -57,102 +47,65 @@ class ErrorResponse(BaseModel):
     status: str
     message: str
 
-# --- Core Logic ---
-@app.post("/api/voice-detection", response_model=VoiceAnalysisResponse, responses={401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
-async def detect_voice_origin(
-    request: VoiceAnalysisRequest, 
-    api_key: str = Depends(verify_api_key)
-):
+@app.post("/api/voice-detection", response_model=VoiceAnalysisResponse)
+async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depends(verify_api_key)):
     try:
-        # Direct REST API Approach to bypass SDK audio limitations
-        # We use the v1beta API which supports inline data for smaller files
         api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         
+        # Forensic Inversion Strategy
         prompt_text = f"""
-        You are an advanced forensic acoustic engineer. Analyze this audio to distinguish between organic human speech and synthetic (AI) generation.
-        Language: {request.language}
+        ACT AS: Senior Forensic Audio Analyst.
+        TASK: Determine if vocal source is BIO-ORGANIC (Human) or SYNTHETIC (AI).
+        LANGUAGE: {request.language}
         
-        CLASSIFICATION RULES:
-        - 'HUMAN': Presence of POL markers, organic irregularities.
-        - 'AI_GENERATED': Hyper-consistent pitch, flattened noise floor, lack of organic artifacts.
+        FORENSIC CHECKLIST:
+        1. SEARCH FOR 'PROOF OF LIFE' (POL):
+           - Breathing patterns.
+           - Mouth/Lip clicks.
+           - Natural Room-tone bleed.
+        2. SEARCH FOR 'SYNTHETIC MARKERS' (SM):
+           - Robotic spectral consistency.
+           - Digital flatness.
+        
+        DECISION: If POL exists (even if audio is clear), it is HUMAN. If POL is absent and spectral noise is hyper-consistent, it is AI_GENERATED.
         
         Return exactly this JSON:
         {{
             "status": "success",
             "language": "{request.language}",
-            "classification": "AI_GENERATED" | "HUMAN",
-            "confidenceScore": float (0.0 - 1.0),
-            "explanation": "Brief technical justification."
+            "classification": "HUMAN" or "AI_GENERATED",
+            "confidenceScore": float,
+            "explanation": "Reasoning based on POL/SM markers."
         }}
         """
         
-        # Construct Payload
         payload = {
-            "contents": [{
-                "parts": [
-                    {"text": prompt_text},
-                    {
-                        "inline_data": {
-                            "mime_type": "audio/mp3",
-                            "data": request.audioBase64
-                        }
-                    }
-                ]
-            }]
+            "contents": [{"parts": [{"text": prompt_text}, {"inline_data": {"mime_type": "audio/mp3", "data": request.audioBase64}}]}],
+            "safetySettings": [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]],
+            "generationConfig": {"temperature": 0.0, "response_mime_type": "application/json"}
         }
         
-        # Send Request
-        response = requests.post(api_url, json=payload)
+        response = requests.post(api_url, json=payload, timeout=45)
         
         if response.status_code != 200:
-            print(f"⚠️ Gemini API Warning: {response.text}")
-            # FALLBACK: If Gemini rejects the audio (likely due to test/silent audio or free tier limits),
-            # we return a simulated response so the API contract can be verified locally.
-            print("ℹ️ Returning SIMULATED analysis for local verification.")
-            
-            return VoiceAnalysisResponse(
-                status="success",
-                language=request.language,
-                classification="AI_GENERATED", # Default for fail-open
-                confidenceScore=0.95,
-                explanation="[SIMULATION] The audio analysis service is currently simulating results due to model input restrictions on the generic test file. The system detected high spectral consistency typical of AI synthesis."
-            )
+            raise Exception(f"API Error: {response.text}")
             
         result = response.json()
+        raw_text = result['candidates'][0]['content']['parts'][0]['text']
+        result_json = json.loads(raw_text)
         
-        # Parse text result
-        try:
-            raw_text = result['candidates'][0]['content']['parts'][0]['text']
-            # Cleanup markdown
-            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
-            result_json = json.loads(clean_text)
-            
-            return VoiceAnalysisResponse(
-                status="success",
-                language=request.language,
-                classification=result_json.get("classification", "AI_GENERATED"),
-                confidenceScore=result_json.get("confidenceScore", 0.0),
-                explanation=result_json.get("explanation", "Analysis completed.")
-            )
-        except (KeyError, IndexError, json.JSONDecodeError) as e:
-            print(f"Parsing Error: {e}")
-            return VoiceAnalysisResponse(
-                status="success",
-                language=request.language,
-                classification="AI_GENERATED", 
-                confidenceScore=0.5,
-                explanation="Raw analysis result could not be parsed."
-            )
-
-    except Exception as e:
-        print(f"Error processing request: {str(e)}")
-        # If it's a critical logic error, still return 500, but try to handle API failures gracefully above
-        raise HTTPException(
-            status_code=500,
-            detail=ErrorResponse(status="error", message=str(e)).dict()
+        return VoiceAnalysisResponse(
+            status="success",
+            language=request.language,
+            classification=result_json.get("classification", "AI_GENERATED"),
+            confidenceScore=result_json.get("confidenceScore", 0.0),
+            explanation=result_json.get("explanation", "Verification completed.")
         )
 
-# Health check for Render
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail={"status": "error", "message": str(e)})
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
