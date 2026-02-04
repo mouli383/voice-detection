@@ -50,7 +50,8 @@ class ErrorResponse(BaseModel):
 @app.post("/api/voice-detection", response_model=VoiceAnalysisResponse)
 async def detect_voice_origin(request: VoiceAnalysisRequest, api_key: str = Depends(verify_api_key)):
     try:
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        # Using specific version tag to avoid 404s
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-001:generateContent?key={GEMINI_API_KEY}"
         
         # Forensic Inversion Strategy
         prompt_text = f"""

@@ -14,7 +14,7 @@ def test_live():
         print("❌ Please update the DEPLOYED_URL variable with your Render URL first!")
         return
 
-    print(f"🌍 Connecting to {DEPLOYED_URL}...")
+    print(f"Connecting to {DEPLOYED_URL}...")
     
     clean_b64 = VALID_MP3_B64.strip().replace("\n", "")
     
